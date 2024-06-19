@@ -12,6 +12,7 @@ use POSIX qw(strftime);
 use File::Temp qw(tempfile);
 use File::Basename;
 use File::stat;
+use Net::Amazon::S3::Authorization::Basic;
 
 use constant TRUE => 1;
 use constant FALSE => 0;
@@ -892,11 +893,15 @@ sub send_files_with_s3($$$$$$)
     # loop on each hosts given and connect to them.
     foreach my $host (@{$ra_hosts}) {
         my $s3 = Net::Amazon::S3->new(
-            {   
-                aws_access_key_id => $user,
+            authorization_context => Net::Amazon::S3::Authorization::Basic->new (
+                aws_access_key_id     => $user,
                 aws_secret_access_key => $passwd,
-                timeout => 300
-            }
+            ),
+            vendor => Net::Amazon::S3::Vendor::Amazon->new (
+                host =>"storage.yandexcloud.net",
+                use_virtual_host => 0,
+            ),
+            timeout => 300
         );
 
         unless (defined $s3) {

@@ -152,8 +152,9 @@ function bm_upload_ftp()
 function bm_upload_s3()
 {
     info "Using the upload method \"S3\"."
-
-    bm_upload_hosts="s3.amazon.com"
+    bm_upload_hosts="$BM_UPLOAD_HOSTS"
+    # bm_upload_hosts="s3.amazon.com"
+    
     bm_upload_init "$bm_upload_hosts" 
     
     if [[ -z "$BM_UPLOAD_S3_DESTINATION" ]]; then
