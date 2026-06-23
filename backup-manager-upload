@@ -13,6 +13,7 @@ use File::Temp qw(tempfile);
 use File::Basename;
 use File::stat;
 use Net::Amazon::S3::Authorization::Basic;
+use Net::Amazon::S3::Vendor::Generic;
 
 use constant TRUE => 1;
 use constant FALSE => 0;
@@ -41,6 +42,7 @@ my $g_sshclean   = undef;
 my $g_protocol     = 'scp';
 my $g_remote_dir= '/var/archives/uploads';
 my $g_bucket    = undef;
+my $g_region    = undef;
 my $g_root_dir    = '/var/archives';
 my $g_key_file    = undef;
 my $g_gpg_recipient = undef;
@@ -54,7 +56,8 @@ BackupManager::Config::getopt("$0 -m=mode -h=host -u=user [options] date\n
 -p|--password    : remote user's password (needed for ftp and s3 uploads).
 -k|--key    : SSH key file to use for opening the scp session (only needed for scp mode).
 -d|--directory    : Directory on the remote host where files will go (default is /var/archives/uploads).
--b|--bucket     : Amazon S3 storage bucket to use
+-b|--bucket     : S3 storage bucket to use
+-c|--region     : S3 region
 -r|--root    : Root directory of your archives (default /var/archives).
 -l|--list    : Only prints which files would be uploaded.
 --gpg-recipient : Selects the public key used for gpg encryption (only for ssh-gpg mode).
@@ -71,6 +74,7 @@ date        : All files >= date will be uploaded. Either a valid date (YYYYMMDD)
 'password|p=s'     => \$g_pass,
 'directory|d=s'    => \$g_remote_dir,
 'bucket|b=s'    => \$g_bucket,
+'region|c=s'    => \$g_region,
 'key|k=s'    => \$g_key_file,
 'root|r=s'    => \$g_root_dir,
 'gpg-recipient=s' => \$g_gpg_recipient,
@@ -858,7 +862,7 @@ sub s3_clean_directory($)
 
 # How to upload files to s3.
 # We'll use the Net::Amazon::S3 module here.
-sub send_files_with_s3($$$$$$)
+sub send_files_with_s3($$$$$$$)
 {
     # trying to get Net::Amazon::S3.
     eval "use Net::Amazon::S3";
@@ -873,11 +877,12 @@ sub send_files_with_s3($$$$$$)
     }
 
     # getting args
-    my ($user, $passwd, $bucket, $ra_hosts, $repository, $ra_files) = @_;
+    my ($user, $passwd, $bucket, $region, $ra_hosts, $repository, $ra_files) = @_;
 
     unless (defined $user and 
         defined $passwd and
         defined $bucket and
+        defined $region and
         defined $ra_hosts and
         defined $ra_files and
         defined $repository) {
@@ -897,9 +902,12 @@ sub send_files_with_s3($$$$$$)
                 aws_access_key_id     => $user,
                 aws_secret_access_key => $passwd,
             ),
-            vendor => Net::Amazon::S3::Vendor::Amazon->new (
-                host =>"storage.yandexcloud.net",
+            vendor => Net::Amazon::S3::Vendor::Generic->new (
+                host => $host,
+                use_https => 1,
                 use_virtual_host => 0,
+                authorization_method => "Net::Amazon::S3::Signature::V4",
+                region => $region
             ),
             timeout => 300
         );
@@ -928,6 +936,8 @@ sub send_files_with_s3($$$$$$)
             $bucket_obj = $s3->add_bucket( { bucket => $bucket } );
             print_error "Could not create bucket $bucket" if not ( $bucket_obj );
         }
+
+        print_info "Cleaning";
 
         s3_clean_directory($bucket_obj) if ($g_s3clean);
 
@@ -1018,9 +1028,17 @@ if ($g_protocol eq 'ftp' and not defined $g_pass) {
     }
 }
 
-if ($g_protocol eq 's3' and (not defined $g_bucket or not defined $g_pass)) {
+if ($g_protocol eq 's3' and (not defined $g_bucket or not defined $g_pass or not defined $g_region)) {
     if (! defined $g_pass && defined $ENV{BM_UPLOAD_S3_SECRET_KEY}) {
         $g_pass = $ENV{BM_UPLOAD_S3_SECRET_KEY};
+    }
+    else {
+        print $BackupManager::Config::usage, "\n";
+        exit E_INVALID;
+    }
+
+    if (! defined $g_region && defined $ENV{BM_UPLOAD_S3_REGION}) {
+        $g_region = $ENV{BM_UPLOAD_S3_REGION};
     }
     else {
         print $BackupManager::Config::usage, "\n";
@@ -1095,7 +1113,8 @@ elsif ($g_protocol eq 's3') {
     print_info "Trying to upload files to s3 service";
     if (! send_files_with_s3 ($g_user, 
                             $g_pass, 
-                            $g_bucket, 
+                            $g_bucket,
+                            $g_region,
                             $ra_hosts, 
                             $g_remote_dir, 
                             $ra_files)) {

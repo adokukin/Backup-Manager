@@ -456,6 +456,9 @@ export BM_UPLOAD_S3_ACCESS_KEY=""
 # the S3 secret key provided to you
 export BM_UPLOAD_S3_SECRET_KEY=""
 
+# the S3 region
+export BM_UPLOAD_S3_REGION=""
+
 # purge archives on remote hosts before uploading?
 export BM_UPLOAD_S3_PURGE="false"
 
