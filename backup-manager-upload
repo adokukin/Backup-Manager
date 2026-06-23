@@ -909,9 +909,17 @@ sub send_files_with_s3($$$$$$)
             return FALSE;
         }
 
-        print_info "Connected to $host";
+        print_info "Connected to $host, user $user";
+
+        my $buckets = $s3->buckets;
+        print_info "Available buckets:";
+        foreach my $bucket ( @{ $buckets->{buckets} } ) {
+            print_info " ".$bucket->bucket;
+        }
 
         my $bucket_obj = $s3->bucket($bucket);
+
+        print_info "Using bucket $bucket";
 
         my $response = $bucket_obj->list;
 
